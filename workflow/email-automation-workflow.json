@@ -1,0 +1,285 @@
+{
+  "name": "Query Classifier and Email Sender",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-query",
+        "responseMode": "=responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -340,
+        -120
+      ],
+      "id": "4bd1f298-c706-442d-9388-e7d8ee21bff6",
+      "name": "Webhook",
+      "webhookId": "7406678d-3f7a-4080-9828-a3b4e6f37edc"
+    },
+    {
+      "parameters": {
+        "url": "https://api.escuelajs.co/api/v1/users",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "d31d31ec-b20c-4f97-9663-c0aa0647807d",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the category from classifier node\nconst category = $node[\"Classify\"].json.category;\nconsole.log(category);\nconst users = $items().map(item => item.json);\n\n// Filter users based on role\nconst matchedUsers = users.filter(user => {\n  const role = (user.role || '').toLowerCase();\n  return role === category;\n});\n\n// Return filtered results\nreturn [{\n  json: {\n    message: matchedUsers.length > 0\n      ? `Matched ${matchedUsers.length} users for role '${category}'`\n      : `No users matched for role '${category}'`,\n    category,\n    users: matchedUsers\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ],
+      "id": "2c02a0c2-6128-4727-9f27-f8cf0b5ef7aa",
+      "name": "filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "let inputQuery = $json.body?.query;\n\nif (typeof inputQuery !== 'string') {\n  console.log(\"Query is not a string, coercing...\");\n  inputQuery = JSON.stringify(inputQuery || '');\n}\n\ninputQuery = inputQuery.toLowerCase();\n\n// Define flat keyword arrays\nconst customerKeywords = [\n  'product', 'inquiry', 'support', 'sales', 'question',\n  'billing', 'feature', 'refund', 'charged'\n];\n\nconst adminKeywords = [\n  'technical', 'escalation', 'system', 'issue',\n  'security', 'concern', 'data', 'integration', 'api',\n  'production', 'urgent'\n];\n\n// Tokenize query\nconst queryWords = inputQuery.split(/\\W+/);\n\nlet category = 'unknown';\n\nif (queryWords.some(word => customerKeywords.includes(word))) {\n  category = 'customer';\n} else if (queryWords.some(word => adminKeywords.includes(word))) {\n  category = 'admin';\n}\n\nconsole.log(\"Query:\", inputQuery);\nconsole.log(\"Category:\", category);\n\nreturn [{\n  json: {\n    query: inputQuery,\n    category\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "837a3af6-6754-4325-b6dc-d8fd668ff6f3",
+      "name": "Classify"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1760,
+        0
+      ],
+      "id": "c95be2b1-f6a4-4833-a9c6-331894d84b76",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "sendTo": "ppatil@presidio.com",
+        "subject": "=Support Query - {{$node[\"Classify\"].json.category}}",
+        "message": "=<div style=\"font-family: Arial, sans-serif; line-height: 1.6;\">\n  <h2>🔔 Support Query Notification</h2>\n\n  <p><b>Date & Time:</b> {{ new Date().toLocaleString() }}</p>\n  <p><b>Category:</b> {{ $node[\"Classify\"].json.category }}</p>\n  <p><b>Matched Users:</b> {{ $json.users.length }}</p>\n\n  <hr/>\n\n  <p>Dear team,</p>\n\n  <p>We received the following support query:</p>\n  <blockquote style=\"margin: 1em 0; padding: 0.5em 1em; background: #f9f9f9; border-left: 4px solid #ccc;\">\n    \"{{ $node[\"Classify\"].json.query }}\"\n  </blockquote>\n\n  <p>Based on the content, this has been classified as a <b>{{ $node[\"Classify\"].json.category }}</b> request and forwarded to the matched users listed below.</p>\n\n  <h3>📋 Matched User Details</h3>\n\n  <table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse: collapse; width: 100%; max-width: 600px;\">\n    <thead style=\"background-color: #f2f2f2;\">\n      <tr>\n        <th align=\"left\">Name</th>\n        <th align=\"left\">Email</th>\n        <th align=\"left\">Role</th>\n      </tr>\n    </thead>\n    <tbody>\n      {{ $json.users.map(user => `\n        <tr>\n          <td>${user.name}</td>\n          <td>${user.email}</td>\n          <td>${user.role}</td>\n        </tr>\n      `).join('') }}\n    </tbody>\n  </table>\n\n  <hr/>\n\n  <p>Best regards,<br/>\n  <b>AI Support Agent</b></p>\n</div>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        0
+      ],
+      "id": "79aa6c5b-be7b-4f43-9d27-29b604138d8a",
+      "name": "Send a message",
+      "webhookId": "0711ba66-649a-4501-88f3-26f56d8d5ae0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gCdoTdsraoC4IInX",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-3.5-turbo",
+          "mode": "list",
+          "cachedResultName": "gpt-3.5-turbo"
+        },
+        "options": {
+          "maxTokens": 500,
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        140
+      ],
+      "id": "54ec8040-717f-4a94-a9cd-62d797d3016e",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "8EinLKqIkVPaxhiu",
+          "name": "OpenAi account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        200,
+        -60
+      ],
+      "id": "beaa8987-b7c8-4709-be9d-c43a8a80b1c2",
+      "name": "AI Email Agent",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const query = $json.body?.query || $json.query || '';\n\nreturn {\n  json: {\n    chatInput: query || 'No input provided'\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -120
+      ],
+      "id": "0e398d65-d2ad-401c-9380-f0c937ac9b99",
+      "name": "Code",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=support-session-1"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        300,
+        120
+      ],
+      "id": "65bf38b5-f5ab-49b1-ac3a-b7aaea8984dd",
+      "name": "Simple Memory"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "filter": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Email Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Email Agent": {
+      "main": [
+        [
+          {
+            "node": "Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "AI Email Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Email Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "892888df-f878-4542-91dc-264fbc667a3a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "803e6f0b32effa024698e2cb4f90b880663e2340ab0aaeed72b4436804a654a5"
+  },
+  "id": "Al0bFaBFRAGaC8Sm",
+  "tags": []
+}
